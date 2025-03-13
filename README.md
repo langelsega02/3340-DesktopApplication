@@ -2,7 +2,7 @@
 
 Team Members:
 
-Alexis
-Gary
-Luis
+Alexis,
+Gary,
+Luis,
 Miguel
