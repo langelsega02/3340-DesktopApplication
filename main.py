@@ -1,38 +1,53 @@
-from tkinter import *
+from customtkinter import*
 
-#Window Functions
-def center_window(window):
-    window.update_idletasks()
-    width = window.winfo_width()
-    height = window.winfo_height()
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    x = (screen_width - width) // 2
-    y = (screen_height - height) // 2
-    window.geometry(f"{width}x{height}+{x}+{y}")
-
+counter = 0
+def add_todo():
+    if(len(entry.get()) == 0):
+        return
     
-def window_name(window, title_name):
-    window.title(title_name)
+    global counter
+    counter += 1
+
+    todo = entry.get()
+    checkbox = CTkCheckBox(scroll_frame, text= f"Task {counter}: {todo}")
+    checkbox.pack()
+
+    entry.delete(0,END)
 
 
-#Windows
-main_window = Tk()
-main_window.geometry("420x420")
-center_window(main_window)
-window_name(main_window, "Main Window")
 
-def popup():
-    popup_window = Tk()
-    popup_window.geometry("420x420")
-    center_window(popup_window)
-    window_name(popup_window, "Popup Window")
+root = CTk()
+root.title("Main Window")
+root.geometry("750x450")
+
+dropdown_name = StringVar()
+dropdown_name.set("Hello")
+
+options_list = [
+    "Option 1",
+    "Option 2",
+    "Option 3",
+    "Option 4"
+]
+
+new_frame = CTkFrame(root)
+new_frame_dropdown = CTkOptionMenu(new_frame ,width=183, variable=dropdown_name ,dynamic_resizing=True, values= options_list, anchor="w").pack()
+new_frame.pack(fill="y" ,side = "left")
+
+title_label = CTkLabel(root, text="Daily Tasks", font=CTkFont(size=30, weight="bold", family="Comic Sans"))
+title_label.pack(padx = 10, pady=(40,20))
+
+scroll_frame = CTkScrollableFrame(root, width=500, height=200)
+scroll_frame.pack()
+
+entry = CTkEntry(scroll_frame, placeholder_text="Text")
+entry.pack(fill = "x")
 
 
-#Widgets
-popup_window_button = Button(main_window, text="Press for Pop-up!", command=popup)
-popup_window_button.pack(anchor="center")
-
-mainloop()
+add_button = CTkButton(root, text="Add", width=500, command=add_todo)
+entry.bind("<Return>", lambda event: add_button.invoke())
+add_button.pack(pady=20)
 
 
+
+root.mainloop()
