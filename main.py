@@ -29,6 +29,7 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             task TEXT NOT NULL,
+            description TEXT,
             due_date TEXT,
             priority TEXT,
             completed INTEGER DEFAULT 0,
@@ -40,6 +41,10 @@ def create_tables():
         cursor.execute("SELECT checked FROM tasks LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE tasks ADD COLUMN checked INTEGER DEFAULT 0")
+    try:
+        cursor.execute("SELECT description FROM tasks LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN description TEXT")
 
     conn.commit()
     conn.close()
@@ -86,6 +91,9 @@ class TodoApp:
         self.task_entry = ctk.CTkEntry(root, placeholder_text="Enter task")
         self.task_entry.pack(pady=10)
 
+        self.description_entry = ctk.CTkEntry(root, placeholder_text="Enter description (optional)")
+        self.description_entry.pack(pady=10)
+
         self.due_date_entry = ctk.CTkEntry(root, placeholder_text="Due Date")
         self.due_date_entry.pack(pady=10)
 
@@ -116,16 +124,18 @@ class TodoApp:
     def add_task(self):
         """Adds a new task to the database and updates the UI."""
         task = self.task_entry.get()
+        description = self.description_entry.get()
         due_date = self.due_date_entry.get()
         priority = self.priority_var.get()
         if task:
             conn = create_connection()
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO tasks (user_id, task, due_date, priority) VALUES (?, ?, ?, ?)",
-                            (self.user_id, task, due_date, priority))
+            cursor.execute("INSERT INTO tasks (user_id, task, description, due_date, priority) VALUES (?, ?, ?, ?, ?)",
+                            (self.user_id, task, description, due_date, priority))
             conn.commit()
             conn.close()
             self.task_entry.delete(0, ctk.END)
+            self.description_entry.delete(0, ctk.END)
             self.due_date_entry.delete(0, ctk.END)
             self.priority_var.set("Choose a Priority") #reset priority after adding to default prompt
             self.load_tasks()
@@ -137,15 +147,18 @@ class TodoApp:
 
         conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, task, due_date, priority, completed, checked FROM tasks WHERE user_id = ?", (self.user_id,))
+        cursor.execute("SELECT id, task, description, due_date, priority, completed, checked FROM tasks WHERE user_id = ?", (self.user_id,))
         tasks = cursor.fetchall()
         conn.close()
 
         self.task_checkboxes = {} # Dictionary to store task IDs and their corresponding checkboxes
 
-        for task_id, task, due_date, priority, completed, checked in tasks:
+        for task_id, task, description, due_date, priority, completed, checked in tasks:
             task_frame = ctk.CTkFrame(self.task_list)
             task_frame.pack(pady=5, fill="x")
+
+            top_row = ctk.CTkFrame(task_frame, fg_color="transparent")
+            top_row.pack(fill="x")
 
             priority_color = "green"  # Default to green (Low)
             if priority == "Medium":
@@ -156,9 +169,9 @@ class TodoApp:
             task_label_text = f"{task}"
             if due_date:
                 task_label_text += f" (Due: {due_date})"
-
-            task_label = ctk.CTkLabel(task_frame, text=task_label_text, anchor="w", font=("Helvetica Rounded", 14))
-            task_label.pack(side="left")
+            
+            task_label = ctk.CTkLabel(top_row, text=task_label_text, anchor="w", font=("Helvetica Rounded", 14), wraplength=600, justify="left")
+            task_label.pack(side="left", padx=5, fill="x", expand=True)
 
             if priority and priority != "Choose a Priority":
                 priority_label = ctk.CTkLabel(task_frame, text=f" (Priority: {priority})", text_color=priority_color, anchor="w", font=("Helvetica Rounded", 14))
@@ -166,7 +179,7 @@ class TodoApp:
 
             dropdown_var = ctk.StringVar(value="")
             priority_menu = ctk.CTkOptionMenu(
-                task_frame,
+                top_row,
                 values=["Priority: Low", "Priority: Medium", "Priority: High", "Edit Due Date", "Edit Task"],
                 command=lambda p, tid=task_id: self.handle_dropdown(tid, p),
                 variable=dropdown_var,
@@ -178,11 +191,11 @@ class TodoApp:
                 dropdown_hover_color="#565B5E",
                 dropdown_text_color="#DCE4EE",
             )
-            priority_menu.pack(side="left")
+            priority_menu.pack(side="left", padx=5)
 
             checkbox_var = ctk.BooleanVar()
-            checkbox = ctk.CTkCheckBox(task_frame, text="", variable=checkbox_var, command=lambda tid=task_id, checkvar=checkbox_var: self.update_checked(tid, checkvar.get()))
-            checkbox.pack(side="right")
+            checkbox = ctk.CTkCheckBox(top_row, text="", variable=checkbox_var, command=lambda tid=task_id, checkvar=checkbox_var: self.update_checked(tid, checkvar.get()))
+            checkbox.pack(side="left", padx=5)
             self.task_checkboxes[task_id] = checkbox_var # Store checkbox variable in dictionary
 
             complete_button = ctk.CTkButton(task_frame, text="Complete", command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar))
@@ -192,6 +205,10 @@ class TodoApp:
             else:
                 checkbox_var.set(False)
             checkbox_var.set(checked) #set checkbox to correct value from database
+
+            if description:
+                description_label = ctk.CTkLabel(task_frame, text=f"Description: {description}", anchor="w", font=("Helvetica", 12), wraplength=600, justify="left")
+                description_label.pack(anchor="w", padx=10, pady=(0, 5))
 
     def update_checked(self, task_id, checked_value):
         """Updates the checked status in the database."""
@@ -292,21 +309,26 @@ class TodoApp:
 
         conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT task FROM tasks WHERE id = ?", (task_id,))
-        task_text = cursor.fetchone()[0]
+        cursor.execute("SELECT task, description FROM tasks WHERE id = ?", (task_id,))
+        task_text, description_text = cursor.fetchone()
         conn.close()
 
         task_entry = ctk.CTkEntry(dialog, placeholder_text="Edit Task", textvariable=ctk.StringVar(value=task_text))
         task_entry.pack(pady=10)
-        save_button = ctk.CTkButton(dialog, text="Save", command=lambda: self.update_task(task_id, task_entry.get(), dialog))
+
+        description_entry = ctk.CTkEntry(dialog, placeholder_text="Edit Description", textvariable=ctk.StringVar(value=description_text if description_text else ""))
+        description_entry.pack(pady=10)
+
+        save_button = ctk.CTkButton(dialog, text="Save", command=lambda: self.update_task(task_id, task_entry.get(), description_entry.get(), dialog))
         save_button.pack(pady=10)
+
         dialog.bind('<Return>', lambda event=None, task_id = task_id, entry = task_entry, dialog = dialog: self.update_task(task_id, entry.get(), dialog)) #bind enter to save
 
-    def update_task(self, task_id, new_task_text, dialog):
+    def update_task(self, task_id, new_task_text, new_description, dialog):
         """Updates the task text in the database and closes the dialog."""
         conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE tasks SET task = ? WHERE id = ?", (new_task_text, task_id))
+        cursor.execute("UPDATE tasks SET task = ?, description = ? WHERE id = ?", (new_task_text, new_description, task_id))
         conn.commit()
         conn.close()
         dialog.destroy()
