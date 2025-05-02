@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import sqlite3
 import hashlib
+import sys
 import os
 import datetime
 from tkinter.font import Font  # Import Font from tkinter.font
@@ -21,7 +22,8 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            role TEXT DEFAULT 'receiver'
         )
     """)
     cursor.execute("""
@@ -37,6 +39,10 @@ def create_tables():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'receiver'")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     try:
         cursor.execute("SELECT checked FROM tasks LIMIT 1")
     except sqlite3.OperationalError:
@@ -81,7 +87,145 @@ def login_user(username, password):
     return None
 
 # Todo list application
-class TodoApp:
+class ReciverApp():
+    def __init__(self, root, user_id):
+        self.root = root
+        self.user_id = user_id
+        self.root.title("Todo List")
+        self.root.geometry("800x600")
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # Create a frame to hold the buttons side by side
+        self.button_frame = ctk.CTkFrame(root)
+        self.button_frame.pack(pady=10)
+
+        self.delete_tasks_button = ctk.CTkButton(self.button_frame, text="Delete Tasks", command=self.delete_selected_tasks, fg_color="gray", state="disabled")
+        self.delete_tasks_button.pack(side="left", padx=5)  # Use side="left" and padx
+
+        self.task_list = ctk.CTkScrollableFrame(root)
+        self.task_list.pack(pady=10, fill="both", expand=True)
+
+        self.logout_button = ctk.CTkButton(root, text="Logout", command=self.logout)
+        self.logout_button.pack(pady=10)
+
+        self.load_tasks()
+
+        self.root.bind('<Return>', lambda event=None: self.add_task()) #bind enter to add task
+
+    def on_closing(self):
+        self.root.destroy()
+        sys.exit(0)
+
+    def load_tasks(self):
+        """Loads tasks from the database and displays them in the UI."""
+        for widget in self.task_list.winfo_children():
+            widget.destroy()
+
+        conn = create_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, task, description, due_date, priority, completed, checked FROM tasks WHERE user_id = ?", (self.user_id,))
+        tasks = cursor.fetchall()
+        conn.close()
+
+        self.task_checkboxes = {} # Dictionary to store task IDs and their corresponding checkboxes
+
+        for task_id, task, description, due_date, priority, completed, checked in tasks:
+            task_frame = ctk.CTkFrame(self.task_list)
+            task_frame.pack(pady=5, fill="x")
+
+            top_row = ctk.CTkFrame(task_frame, fg_color="transparent")
+            top_row.pack(fill="x")
+
+            priority_color = "green"  # Default to green (Low)
+            if priority == "Medium":
+                priority_color = "yellow"
+            elif priority == "High":
+                priority_color = "red"
+
+            task_label_text = f"{task}"
+            if due_date:
+                task_label_text += f" (Due: {due_date})"
+            
+            task_label = ctk.CTkLabel(top_row, text=task_label_text, anchor="w", font=("Helvetica Rounded", 14), wraplength=600, justify="left")
+            task_label.pack(side="left", padx=5, fill="x", expand=True)
+
+            if priority and priority != "Choose a Priority":
+                priority_label = ctk.CTkLabel(task_frame, text=f" (Priority: {priority})", text_color=priority_color, anchor="w", font=("Helvetica Rounded", 14))
+                priority_label.pack(side="left")
+
+            checkbox_var = ctk.BooleanVar()
+            checkbox = ctk.CTkCheckBox(top_row, text="", variable=checkbox_var, command=lambda tid=task_id, checkvar=checkbox_var: self.update_checked(tid, checkvar.get()))
+            checkbox.pack(side="left", padx=5)
+            self.task_checkboxes[task_id] = checkbox_var # Store checkbox variable in dictionary
+
+            complete_button = ctk.CTkButton(task_frame, text="Complete", command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar))
+            if completed:
+                complete_button.configure(text="Uncomplete")
+                checkbox_var.set(True) # Set checkbox to checked if task is completed
+            else:
+                checkbox_var.set(False)
+            checkbox_var.set(checked) #set checkbox to correct value from database
+
+            if description:
+                description_label = ctk.CTkLabel(task_frame, text=f"Description: {description}", anchor="w", font=("Helvetica", 13), wraplength=400, justify="left")
+                description_label.pack(anchor="w", padx=5)
+
+    def delete_selected_tasks(self):
+        """Deletes tasks with checked checkboxes."""
+        tasks_to_delete = []
+        for task_id, checkbox_var in self.task_checkboxes.items():
+            if checkbox_var.get():
+                tasks_to_delete.append(task_id)
+
+        if tasks_to_delete:
+            conn = create_connection()
+            cursor = conn.cursor()
+            for task_id in tasks_to_delete:
+                cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            conn.commit()
+            conn.close()
+            self.load_tasks() # Reload tasks after deleting.
+
+
+    def update_checked(self, task_id, checked_value):
+        """Updates the checked status in the database."""
+        conn = create_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tasks SET checked = ? WHERE id = ?", (int(checked_value), task_id))
+        conn.commit()
+        conn.close()
+        self.update_delete_button_state()
+
+    def toggle_complete(self, task_id, completed, checkvar):
+        """Toggles a task's completion status in the database and updates the UI."""
+        conn = create_connection()
+        cursor = conn.cursor()
+        if completed:
+            cursor.execute("UPDATE tasks SET completed = 0 WHERE id = ?", (task_id,))
+            checkvar.set(False)
+        else:
+            cursor.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (task_id,))
+            checkvar.set(True)
+        conn.commit()
+        conn.close()
+        self.load_tasks()
+
+
+    def logout(self):
+        self.root.destroy()
+        root = App()
+        root.mainloop()
+
+    def update_delete_button_state(self):
+        """Updates the state of the delete button based on checkbox selection."""
+        checked_tasks = any(var.get() for var in self.task_checkboxes.values())
+        if checked_tasks:
+            self.delete_tasks_button.configure(state="normal", fg_color="red")
+        else:
+            self.delete_tasks_button.configure(state="disabled", fg_color="gray")
+
+class TodoApp():
     def __init__(self, root, user_id):
         self.root = root
         self.user_id = user_id
@@ -120,6 +264,12 @@ class TodoApp:
         self.load_tasks()
 
         self.root.bind('<Return>', lambda event=None: self.add_task()) #bind enter to add task
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def on_closing(self):
+        self.root.destroy()
+        sys.exit(0)
 
     def add_task(self):
         """Adds a new task to the database and updates the UI."""
@@ -207,8 +357,8 @@ class TodoApp:
             checkbox_var.set(checked) #set checkbox to correct value from database
 
             if description:
-                description_label = ctk.CTkLabel(task_frame, text=f"Description: {description}", anchor="w", font=("Helvetica", 12), wraplength=600, justify="left")
-                description_label.pack(anchor="w", padx=10, pady=(0, 5))
+                description_label = ctk.CTkLabel(task_frame, text=f"Description: {description}", anchor="w", font=("Helvetica", 13), wraplength=400, justify="left")
+                description_label.pack(anchor="w", padx=5)
 
     def update_checked(self, task_id, checked_value):
         """Updates the checked status in the database."""
@@ -322,7 +472,7 @@ class TodoApp:
         save_button = ctk.CTkButton(dialog, text="Save", command=lambda: self.update_task(task_id, task_entry.get(), description_entry.get(), dialog))
         save_button.pack(pady=10)
 
-        dialog.bind('<Return>', lambda event=None, task_id = task_id, entry = task_entry, dialog = dialog: self.update_task(task_id, entry.get(), dialog)) #bind enter to save
+        dialog.bind('<Return>', lambda event=None: self.update_task(task_id, task_entry.get(), description_entry.get(), dialog))
 
     def update_task(self, task_id, new_task_text, new_description, dialog):
         """Updates the task text in the database and closes the dialog."""
@@ -336,8 +486,7 @@ class TodoApp:
 
     def logout(self):
         self.root.destroy()
-        root = ctk.CTk()
-        LoginApp(root)
+        root = App()
         root.mainloop()
 
     def update_delete_button_state(self):
@@ -348,56 +497,127 @@ class TodoApp:
         else:
             self.delete_tasks_button.configure(state="disabled", fg_color="gray")
 
-# Login/Register UI
-class LoginApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Login/Register")
-        self.root.geometry("450x450")
 
-        self.title_label = ctk.CTkLabel(root, text="Login", font=("Helvetica Rounded", 26))
-        self.title_label.pack(pady=10)
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.geometry("400x400")
+        self.title("Login/Register App")
 
-        self.username_entry = ctk.CTkEntry(root, placeholder_text="Username", width=160)
-        self.username_entry.pack()
+        self.login_frame = LoginFrame(self, self.show_register)
+        self.register_frame = RegisterFrame(self, self.show_login)
 
-        self.password_entry = ctk.CTkEntry(root, placeholder_text="Password", show="*", width=160)
-        self.password_entry.pack(pady=10)
+        self.login_frame.pack(fill="both", expand=True)
 
-        self.login_button = ctk.CTkButton(root, text="Login", command=self.login)
-        self.login_button.pack(pady=5)
+    def show_register(self):
+        self.login_frame.pack_forget()
+        self.register_frame.pack(fill="both", expand=True)
 
-        self.register_button = ctk.CTkButton(root, text="Register", command=self.register)
-        self.register_button.pack(pady=5)
+    def show_login(self):
+        self.register_frame.pack_forget()
+        self.login_frame.pack(fill="both", expand=True)
 
-        self.error_label = ctk.CTkLabel(root, text="", text_color="red", font=("Helvetica Rounded", 12))
-        self.error_label.pack(pady=5)
+    def on_logout(self):
+        self.deiconify()  # Show login window again
+        self.show_login()
 
-        self.root.bind('<Return>', lambda event=None: self.login()) #bind enter button to login
+
+class LoginFrame(ctk.CTkFrame):
+    def __init__(self, master, show_register_callback):
+        super().__init__(master)
+        self.show_register_callback = show_register_callback
+
+        ctk.CTkLabel(self, text="Login", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=10)
+
+        self.username_entry = ctk.CTkEntry(self, placeholder_text="Username")
+        self.username_entry.pack(pady=5)
+
+        self.password_entry = ctk.CTkEntry(self, placeholder_text="Password", show="*")
+        self.password_entry.pack(pady=5)
+
+        self.error_label = ctk.CTkLabel(self, text="", text_color="red")
+        self.error_label.pack()
+
+        ctk.CTkButton(self, text="Login", command=self.login).pack(pady=5)
+        ctk.CTkButton(self, text="Register", command=self.show_register_callback).pack(pady=5)
 
     def login(self):
-        """Handles user login."""
         username = self.username_entry.get()
         password = self.password_entry.get()
-        user_id = login_user(username, password)
-        if user_id:
-            self.root.destroy()
-            todo_root = ctk.CTk()
-            TodoApp(todo_root, user_id)
-            todo_root.mainloop()
-        else:
-            self.error_label.configure(text="Invalid username or password")
+        hashed = hashlib.sha256(password.encode()).hexdigest()
 
-    def register(self):
-        """Handles user registration."""
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, role FROM users WHERE username=? AND password=?", (username, hashed))
+        user = cursor.fetchone()
+
+        if user:
+            user_id, role = user 
+            self.master.destroy()# close login window
+
+            if role == "assigner":
+                main_app = ctk.CTk()
+                TodoApp(main_app, user_id) # pass user_id if needed
+                main_app.mainloop()
+            else:
+                main_app = ctk.CTk()
+                ReciverApp(main_app, user_id)
+                main_app.mainloop()
+
+
+        else:
+            self.error_label.configure(text="Invalid credentials", text_color="red")
+        conn.close()
+
+
+class RegisterFrame(ctk.CTkFrame):
+    def __init__(self, master, return_to_login_callback):
+        super().__init__(master)
+        self.return_to_login_callback = return_to_login_callback
+
+        ctk.CTkLabel(self, text="Register", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=10)
+
+        self.username_entry = ctk.CTkEntry(self, placeholder_text="Username")
+        self.username_entry.pack(pady=5)
+
+        self.password_entry = ctk.CTkEntry(self, placeholder_text="Password", show="*")
+        self.password_entry.pack(pady=5)
+
+        self.role_var = ctk.StringVar(value="receiver")
+        ctk.CTkLabel(self, text="Select Role").pack()
+        ctk.CTkRadioButton(self, text="Assigner", variable=self.role_var, value="assigner").pack()
+        ctk.CTkRadioButton(self, text="Receiver", variable=self.role_var, value="receiver").pack()
+
+        self.error_label = ctk.CTkLabel(self, text="", text_color="red")
+        self.error_label.pack()
+
+        ctk.CTkButton(self, text="Submit", command=self.register_user).pack(pady=5)
+        ctk.CTkButton(self, text="Back to Login", command=self.return_to_login_callback).pack()
+
+    def register_user(self):
         username = self.username_entry.get()
         password = self.password_entry.get()
-        if register_user(username, password):
-            self.error_label.configure(text="Registration successful")
-        else:
-            self.error_label.configure(text="Username already exists")
+        role = self.role_var.get()
+
+        if not username or not password:
+            self.error_label.configure(text="Please fill all fields.")
+            return
+
+        hashed = hashlib.sha256(password.encode()).hexdigest()
+        conn = create_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                           (username, hashed, role))
+            conn.commit()
+            self.error_label.configure(text="Registration successful!", text_color="green")
+            self.after(1000, self.return_to_login_callback)  # Auto-return to login
+        except sqlite3.IntegrityError:
+            self.error_label.configure(text="Username already exists.", text_color="red")
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
-    root = ctk.CTk()
-    LoginApp(root)
-    root.mainloop()
+    app = App()
+    app.mainloop()
