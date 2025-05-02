@@ -232,28 +232,37 @@ class TodoApp():
         self.root.title("Todo List")
         self.root.geometry("800x600")
 
-        self.task_entry = ctk.CTkEntry(root, placeholder_text="Enter task")
-        self.task_entry.pack(pady=10)
+        self.entry_frame = ctk.CTkFrame(root)
+        self.entry_frame.pack(pady = 10)
 
-        self.description_entry = ctk.CTkEntry(root, placeholder_text="Enter description (optional)")
-        self.description_entry.pack(pady=10)
+        self.description_entry = ctk.CTkEntry(self.entry_frame, height = 65, width = 200, placeholder_text="Enter description (optional)")
+        self.description_entry.pack(padx=5, side = "right")
+        
+        self.task_entry = ctk.CTkEntry(self.entry_frame, placeholder_text="Enter task")
+        self.task_entry.pack(padx=5, pady = 5)
 
-        self.due_date_entry = ctk.CTkEntry(root, placeholder_text="Due Date")
-        self.due_date_entry.pack(pady=10)
+        self.due_date_entry = ctk.CTkEntry(self.entry_frame, placeholder_text="Due Date")
+        self.due_date_entry.pack(padx=5, pady = 5)
 
-        self.priority_var = ctk.StringVar(value="Choose a Priority")  # Default prompt
-        self.priority_menu = ctk.CTkOptionMenu(root, values=["Low", "Medium", "High"], variable=self.priority_var)
-        self.priority_menu.pack(pady=10)
+        self.dropdown_frame = ctk.CTkFrame(root)
+        self.dropdown_frame.pack()
+
+        self.priority_var = ctk.StringVar(value="Choose Priority")  # Default prompt
+        self.priority_menu = ctk.CTkOptionMenu(self.dropdown_frame, values=["Low", "Medium", "High"], variable=self.priority_var)
+        self.priority_menu.pack(pady=5, padx = 5, side = "left")
+
+        self.priority_menu = ctk.CTkButton(self.dropdown_frame, text= "Choose Receiver")
+        self.priority_menu.pack(pady=5, padx = 5, side = "left")
 
         # Create a frame to hold the buttons side by side
         self.button_frame = ctk.CTkFrame(root)
         self.button_frame.pack(pady=10)
 
         self.add_button = ctk.CTkButton(self.button_frame, text="Add Task", command=self.add_task)
-        self.add_button.pack(side="left", padx=5)  # Use side="left" and padx
+        self.add_button.pack(side="left", pady=5, padx = 5)  # Use side="left" and padx
 
         self.delete_tasks_button = ctk.CTkButton(self.button_frame, text="Delete Tasks", command=self.delete_selected_tasks, fg_color="gray", state="disabled")
-        self.delete_tasks_button.pack(side="left", padx=5)  # Use side="left" and padx
+        self.delete_tasks_button.pack(side="left", pady=5, padx = 5)  # Use side="left" and padx
 
         self.task_list = ctk.CTkScrollableFrame(root)
         self.task_list.pack(pady=10, fill="both", expand=True)
