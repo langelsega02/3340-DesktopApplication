@@ -5,6 +5,7 @@ import sys
 import os
 import datetime
 from tkinter.font import Font  # Import Font from tkinter.font
+from tkinter import messagebox
 
 # Database setup
 DB_NAME = "todo_app.db"
@@ -43,6 +44,10 @@ def create_tables():
         cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'receiver'")
     except sqlite3.OperationalError:
         pass  # Column already exists
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN receiver_id INTEGER")
+    except sqlite3.OperationalError:
+        pass  # already added
     try:
         cursor.execute("SELECT checked FROM tasks LIMIT 1")
     except sqlite3.OperationalError:
@@ -254,6 +259,9 @@ class TodoApp():
         self.choose_receiver_button = ctk.CTkButton(self.dropdown_frame, text="Choose Receiver", command=self.open_receiver_popup)
         self.choose_receiver_button.pack(pady=5, padx = 5, side = "left")
 
+        self.selected_receiver_id = None  # store selected receiver
+        self.selected_receiver_name = ""  # optional, for display
+
         # Create a frame to hold the buttons side by side
         self.button_frame = ctk.CTkFrame(root, fg_color="transparent")
         self.button_frame.pack(pady=10)
@@ -281,23 +289,41 @@ class TodoApp():
         sys.exit(0)
 
     def add_task(self):
-        """Adds a new task to the database and updates the UI."""
+        """Adds a new task assigned to the selected receiver."""
         task = self.task_entry.get()
         description = self.description_entry.get()
         due_date = self.due_date_entry.get()
-        priority = self.priority_var.get()
-        if task:
-            conn = create_connection()
+        priority = self.priority_menu.get()
+
+        if not task:
+            messagebox.showerror("Input Error", "Task name cannot be empty.")
+            return
+
+        # Ensure a receiver is selected
+        if not self.selected_receiver_id:
+            messagebox.showerror("Selection Error", "Please select a receiver before adding the task.")
+            return
+
+        try:
+            conn = sqlite3.connect("todo_app.db")
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO tasks (user_id, task, description, due_date, priority) VALUES (?, ?, ?, ?, ?)",
-                            (self.user_id, task, description, due_date, priority))
+            cursor.execute("""
+                INSERT INTO tasks (user_id, task, description, due_date, priority, completed, checked)
+                VALUES (?, ?, ?, ?, ?, 0, 0)
+            """, (self.selected_receiver_id, task, description, due_date, priority))
             conn.commit()
             conn.close()
-            self.task_entry.delete(0, ctk.END)
-            self.description_entry.delete(0, ctk.END)
-            self.due_date_entry.delete(0, ctk.END)
-            self.priority_var.set("Choose a Priority") #reset priority after adding to default prompt
-            self.load_tasks()
+
+            messagebox.showinfo("Success", f"Task assigned to {self.selected_receiver}!")
+            self.task_entry.delete(0, "end")
+            self.description_entry.delete(0, "end")
+            self.due_date_entry.delete(0, "end")
+            self.selected_receiver = None
+            self.selected_receiver_id = None
+            self.load_tasks()  # Refresh task list
+        except Exception as e:
+            messagebox.showerror("Database Error", f"Error adding task: {e}")
+
 
     def load_tasks(self):
         """Loads tasks from the database and displays them in the UI."""
@@ -554,9 +580,22 @@ class TodoApp():
             selected_index = listbox.curselection()
             if selected_index:
                 selected_username = listbox.get(selected_index)
-                # Do something with the selected username, for example, set it to a variable
-                self.selected_receiver = selected_username
-                print(f"Selected receiver: {self.selected_receiver}")
+
+                # Fetch user ID from the database
+                try:
+                    conn = sqlite3.connect("todo_app.db")
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT id FROM users WHERE username = ?", (selected_username,))
+                    result = cursor.fetchone()
+                    conn.close()
+
+                    if result:
+                        self.selected_receiver = selected_username
+                        self.selected_receiver_id = result[0]  # Store the ID
+                        print(f"Selected receiver: {self.selected_receiver} (ID: {self.selected_receiver_id})")
+                except Exception as e:
+                    print(f"Error fetching receiver ID: {e}")
+
                 popup.destroy()
 
         # Select button to confirm the choice
