@@ -232,7 +232,7 @@ class TodoApp():
         self.root.title("Todo List")
         self.root.geometry("800x600")
 
-        self.entry_frame = ctk.CTkFrame(root)
+        self.entry_frame = ctk.CTkFrame(root, fg_color="transparent")
         self.entry_frame.pack(pady = 10)
 
         self.description_entry = ctk.CTkEntry(self.entry_frame, height = 65, width = 200, placeholder_text="Enter description (optional)")
@@ -244,18 +244,18 @@ class TodoApp():
         self.due_date_entry = ctk.CTkEntry(self.entry_frame, placeholder_text="Due Date")
         self.due_date_entry.pack(padx=5, pady = 5)
 
-        self.dropdown_frame = ctk.CTkFrame(root)
+        self.dropdown_frame = ctk.CTkFrame(root,fg_color="transparent")
         self.dropdown_frame.pack()
 
         self.priority_var = ctk.StringVar(value="Choose Priority")  # Default prompt
         self.priority_menu = ctk.CTkOptionMenu(self.dropdown_frame, values=["Low", "Medium", "High"], variable=self.priority_var)
         self.priority_menu.pack(pady=5, padx = 5, side = "left")
 
-        self.priority_menu = ctk.CTkButton(self.dropdown_frame, text= "Choose Receiver")
-        self.priority_menu.pack(pady=5, padx = 5, side = "left")
+        self.choose_receiver_button = ctk.CTkButton(self.dropdown_frame, text="Choose Receiver", command=self.open_receiver_popup)
+        self.choose_receiver_button.pack(pady=5, padx = 5, side = "left")
 
         # Create a frame to hold the buttons side by side
-        self.button_frame = ctk.CTkFrame(root)
+        self.button_frame = ctk.CTkFrame(root, fg_color="transparent")
         self.button_frame.pack(pady=10)
 
         self.add_button = ctk.CTkButton(self.button_frame, text="Add Task", command=self.add_task)
@@ -378,6 +378,14 @@ class TodoApp():
         conn.close()
         self.update_delete_button_state()
 
+    def update_delete_button_state(self):
+        """Updates the state of the delete button based on checkbox selection."""
+        checked_tasks = any(var.get() for var in self.task_checkboxes.values())
+        if checked_tasks:
+            self.delete_tasks_button.configure(state="normal", fg_color="red")
+        else:
+            self.delete_tasks_button.configure(state="disabled", fg_color="gray")
+
     def delete_selected_tasks(self):
         """Deletes tasks with checked checkboxes."""
         tasks_to_delete = []
@@ -498,13 +506,66 @@ class TodoApp():
         root = App()
         root.mainloop()
 
-    def update_delete_button_state(self):
-        """Updates the state of the delete button based on checkbox selection."""
-        checked_tasks = any(var.get() for var in self.task_checkboxes.values())
-        if checked_tasks:
-            self.delete_tasks_button.configure(state="normal", fg_color="red")
-        else:
-            self.delete_tasks_button.configure(state="disabled", fg_color="gray")
+    def open_receiver_popup(self):
+        """Opens a popup with a list of receiver usernames."""
+        # Create a popup window
+        popup = ctk.CTkToplevel(self.root)
+        popup.title("Select Receiver")
+        popup.geometry("300x400")
+
+        # Label for the popup
+        label = ctk.CTkLabel(popup, text="Select a Receiver:")
+        label.pack(pady=10)
+
+        # Frame for the listbox
+        listbox_frame = ctk.CTkFrame(popup)
+        listbox_frame.pack(pady=10, fill="both", expand=True)
+
+        # Scrollbar for the listbox
+        scrollbar = ctk.CTkScrollbar(listbox_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        # Listbox to show receiver usernames
+        from tkinter import Listbox, SINGLE
+        listbox = Listbox(listbox_frame, selectmode=SINGLE, yscrollcommand=scrollbar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=listbox.yview)
+
+        # Fetch receiver usernames from the database
+        try:
+            conn = sqlite3.connect("todo_app.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT username FROM users WHERE role = 'receiver'")
+            receivers = cursor.fetchall()
+            conn.close()
+
+            print("Fetched receivers:", receivers)
+            # Populate the listbox with receiver usernames
+            if receivers:
+                for receiver in receivers:
+                    listbox.insert("end", receiver[0])
+            else:
+                listbox.insert("end", "No receivers found.")
+        except Exception as e:
+            listbox.insert("end", f"Error loading users: {e}")
+
+        # Function to select the receiver
+        def select_receiver():
+            selected_index = listbox.curselection()
+            if selected_index:
+                selected_username = listbox.get(selected_index)
+                # Do something with the selected username, for example, set it to a variable
+                self.selected_receiver = selected_username
+                print(f"Selected receiver: {self.selected_receiver}")
+                popup.destroy()
+
+        # Select button to confirm the choice
+        select_button = ctk.CTkButton(popup, text="Select", command=select_receiver)
+        select_button.pack(pady=10)
+
+        # Make the popup modal
+        popup.grab_set()
+        popup.focus_force()
 
 
 class App(ctk.CTk):
