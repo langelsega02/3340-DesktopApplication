@@ -101,13 +101,6 @@ class ReciverApp():
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # Create a frame to hold the buttons side by side
-        self.button_frame = ctk.CTkFrame(root)
-        self.button_frame.pack(pady=10)
-
-        self.delete_tasks_button = ctk.CTkButton(self.button_frame, text="Delete Tasks", command=self.delete_selected_tasks, fg_color="gray", state="disabled")
-        self.delete_tasks_button.pack(side="left", padx=5)  # Use side="left" and padx
-
         self.task_list = ctk.CTkScrollableFrame(root)
         self.task_list.pack(pady=10, fill="both", expand=True)
 
@@ -115,8 +108,6 @@ class ReciverApp():
         self.logout_button.pack(pady=10)
 
         self.load_tasks()
-
-        self.root.bind('<Return>', lambda event=None: self.add_task()) #bind enter to add task
 
     def on_closing(self):
         self.root.destroy()
@@ -155,7 +146,7 @@ class ReciverApp():
             task_label = ctk.CTkLabel(top_row, text=task_label_text, anchor="w", font=("Helvetica Rounded", 14), wraplength=600, justify="left")
             task_label.pack(side="left", padx=5, fill="x", expand=True)
 
-            if priority and priority != "Choose a Priority":
+            if priority != "Choose Priority":
                 priority_label = ctk.CTkLabel(task_frame, text=f" (Priority: {priority})", text_color=priority_color, anchor="w", font=("Helvetica Rounded", 14))
                 priority_label.pack(side="left")
 
@@ -200,7 +191,6 @@ class ReciverApp():
         cursor.execute("UPDATE tasks SET checked = ? WHERE id = ?", (int(checked_value), task_id))
         conn.commit()
         conn.close()
-        self.update_delete_button_state()
 
     def toggle_complete(self, task_id, completed, checkvar):
         """Toggles a task's completion status in the database and updates the UI."""
@@ -221,14 +211,6 @@ class ReciverApp():
         self.root.destroy()
         root = App()
         root.mainloop()
-
-    def update_delete_button_state(self):
-        """Updates the state of the delete button based on checkbox selection."""
-        checked_tasks = any(var.get() for var in self.task_checkboxes.values())
-        if checked_tasks:
-            self.delete_tasks_button.configure(state="normal", fg_color="red")
-        else:
-            self.delete_tasks_button.configure(state="disabled", fg_color="gray")
 
 class TodoApp():
     def __init__(self, root, user_id):
