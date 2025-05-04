@@ -101,6 +101,14 @@ class ReciverApp():
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+        username = self.load_username()
+        self.user = ctk.StringVar(value= f"Welcome, {username}!")
+        self.welcome_msg = ctk.CTkLabel(root, textvariable = self.user, font=("Helvetica Rounded", 20))
+        self.welcome_msg.pack(anchor="w", padx=20, pady=(15,5))
+
+        self.welcome_2 = ctk.CTkLabel(root, text="Here are your assigned tasks:" ,font=("Helvetica Rounded", 15))
+        self.welcome_2.pack(anchor="w", padx=20, pady=5)
+
         self.task_list = ctk.CTkScrollableFrame(root)
         self.task_list.pack(pady=10, fill="both", expand=True)
 
@@ -112,6 +120,14 @@ class ReciverApp():
     def on_closing(self):
         self.root.destroy()
         sys.exit(0)
+
+    def load_username(self):
+        conn = create_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username FROM users WHERE id = ?", (self.user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else "User"
 
     def load_tasks(self):
         """Loads tasks from the database and displays them in the UI."""
