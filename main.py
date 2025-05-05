@@ -428,7 +428,8 @@ class TodoApp():
                     anchor="w", font=("Helvetica", 13), wraplength=400, justify="left"
                 )
                 description_label.pack(anchor="w", padx=5)
-
+            
+            self.update_delete_button_state()
 
     def update_checked(self, task_id, checked_value):
         """Updates the checked status in the database."""
