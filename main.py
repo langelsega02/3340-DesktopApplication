@@ -410,6 +410,18 @@ class TodoApp():
             checkbox.pack(side="left", padx=5)
             self.task_checkboxes[task_id] = checkbox_var
 
+            complete_button = ctk.CTkButton(
+                task_frame, text="Complete",
+                command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar)
+            )
+            if completed:
+                complete_button.configure(text="Uncomplete")
+                checkbox_var.set(True)
+            else:
+                checkbox_var.set(False)
+
+            checkbox_var.set(checked)
+
             if description:
                 description_label = ctk.CTkLabel(
                     task_frame, text=f"Description: {description}",
