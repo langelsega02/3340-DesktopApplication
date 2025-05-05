@@ -49,6 +49,11 @@ def create_tables():
     except sqlite3.OperationalError:
         pass  # already added
     try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN assigner_id INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
         cursor.execute("SELECT checked FROM tasks LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE tasks ADD COLUMN checked INTEGER DEFAULT 0")
@@ -306,9 +311,9 @@ class TodoApp():
             conn = sqlite3.connect("todo_app.db")
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO tasks (user_id, task, description, due_date, priority, completed, checked)
-                VALUES (?, ?, ?, ?, ?, 0, 0)
-            """, (self.selected_receiver_id, task, description, due_date, priority))
+                INSERT INTO tasks (user_id, assigner_id, task, description, due_date, priority, completed, checked)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+            """, (self.selected_receiver_id, self.user_id, task, description, due_date, priority))
             conn.commit()
             conn.close()
 
@@ -324,40 +329,54 @@ class TodoApp():
 
 
     def load_tasks(self):
-        """Loads tasks from the database and displays them in the UI."""
+        """Loads tasks from the database and displays them in the UI (assigned by current user)."""
         for widget in self.task_list.winfo_children():
             widget.destroy()
 
         conn = create_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, task, description, due_date, priority, completed, checked FROM tasks WHERE user_id = ?", (self.user_id,))
+        cursor.execute("""
+            SELECT tasks.id, tasks.task, tasks.description, tasks.due_date,
+                tasks.priority, tasks.completed, tasks.checked,
+                users.username
+            FROM tasks
+            JOIN users ON tasks.user_id = users.id
+            WHERE tasks.assigner_id = ?
+        """, (self.user_id,))
         tasks = cursor.fetchall()
         conn.close()
 
-        self.task_checkboxes = {} # Dictionary to store task IDs and their corresponding checkboxes
+        self.task_checkboxes = {}
 
-        for task_id, task, description, due_date, priority, completed, checked in tasks:
+        for task_id, task, description, due_date, priority, completed, checked, receiver_username in tasks:
             task_frame = ctk.CTkFrame(self.task_list)
             task_frame.pack(pady=5, fill="x")
 
             top_row = ctk.CTkFrame(task_frame, fg_color="transparent")
             top_row.pack(fill="x")
 
-            priority_color = "green"  # Default to green (Low)
+            priority_color = "green"
             if priority == "Medium":
                 priority_color = "yellow"
             elif priority == "High":
                 priority_color = "red"
 
-            task_label_text = f"{task}"
+            task_label_text = f"{task} (To: {receiver_username})"
             if due_date:
                 task_label_text += f" (Due: {due_date})"
-            
-            task_label = ctk.CTkLabel(top_row, text=task_label_text, anchor="w", font=("Helvetica Rounded", 14), wraplength=600, justify="left")
+
+            task_label = ctk.CTkLabel(
+                top_row, text=task_label_text, anchor="w",
+                font=("Helvetica Rounded", 14), wraplength=600, justify="left"
+            )
             task_label.pack(side="left", padx=5, fill="x", expand=True)
 
-            if priority and priority != "Choose a Priority":
-                priority_label = ctk.CTkLabel(task_frame, text=f" (Priority: {priority})", text_color=priority_color, anchor="w", font=("Helvetica Rounded", 14))
+            if priority != "Choose Priority":
+                priority_label = ctk.CTkLabel(
+                    task_frame, text=f"(Priority: {priority})",
+                    text_color=priority_color, anchor="w",
+                    font=("Helvetica Rounded", 14)
+                )
                 priority_label.pack(side="left")
 
             dropdown_var = ctk.StringVar(value="")
@@ -377,21 +396,34 @@ class TodoApp():
             priority_menu.pack(side="left", padx=5)
 
             checkbox_var = ctk.BooleanVar()
-            checkbox = ctk.CTkCheckBox(top_row, text="", variable=checkbox_var, command=lambda tid=task_id, checkvar=checkbox_var: self.update_checked(tid, checkvar.get()))
+            checkbox = ctk.CTkCheckBox(
+                top_row, text="", variable=checkbox_var,
+                command=lambda tid=task_id, checkvar=checkbox_var: self.update_checked(tid, checkvar.get())
+            )
             checkbox.pack(side="left", padx=5)
-            self.task_checkboxes[task_id] = checkbox_var # Store checkbox variable in dictionary
+            self.task_checkboxes[task_id] = checkbox_var
 
-            complete_button = ctk.CTkButton(task_frame, text="Complete", command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar))
+            complete_button = ctk.CTkButton(
+                task_frame, text="Complete",
+                command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar)
+            )
+            complete_button.pack(side="right", padx=5)
+
             if completed:
                 complete_button.configure(text="Uncomplete")
-                checkbox_var.set(True) # Set checkbox to checked if task is completed
+                checkbox_var.set(True)
             else:
                 checkbox_var.set(False)
-            checkbox_var.set(checked) #set checkbox to correct value from database
+
+            checkbox_var.set(checked)
 
             if description:
-                description_label = ctk.CTkLabel(task_frame, text=f"Description: {description}", anchor="w", font=("Helvetica", 13), wraplength=400, justify="left")
+                description_label = ctk.CTkLabel(
+                    task_frame, text=f"Description: {description}",
+                    anchor="w", font=("Helvetica", 13), wraplength=400, justify="left"
+                )
                 description_label.pack(anchor="w", padx=5)
+
 
     def update_checked(self, task_id, checked_value):
         """Updates the checked status in the database."""
