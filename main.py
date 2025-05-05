@@ -647,7 +647,7 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.geometry("400x400")
-        self.title("Login/Register App")
+        self.title("Login/Register")
 
         self.login_frame = LoginFrame(self, self.show_register)
         self.register_frame = RegisterFrame(self, self.show_login)
@@ -683,8 +683,13 @@ class LoginFrame(ctk.CTkFrame):
         self.error_label = ctk.CTkLabel(self, text="", text_color="red")
         self.error_label.pack()
 
-        ctk.CTkButton(self, text="Login", command=self.login).pack(pady=5)
-        ctk.CTkButton(self, text="Register", command=self.show_register_callback).pack(pady=5)
+        self.login_button = ctk.CTkButton(self, text="Login", command=self.login)
+        self.login_button.pack(pady=5)
+
+        self.register_button = ctk.CTkButton(self, text="Register", command=self.show_register_callback)
+        self.register_button.pack(pady=5)
+
+        self.master.bind('<Return>', lambda event=None: self.login())
 
     def login(self):
         username = self.username_entry.get()
