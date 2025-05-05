@@ -361,9 +361,16 @@ class TodoApp():
             elif priority == "High":
                 priority_color = "red"
 
-            task_label_text = f"{task} (To: {receiver_username})"
+            assigned_to_text = f"Assigned To: {receiver_username}"
+            task_label_text = f"{task}"
             if due_date:
                 task_label_text += f" (Due: {due_date})"
+
+            assigned_to_label = ctk.CTkLabel(
+                top_row, text=assigned_to_text, anchor="w",
+                font=("Helvetica Rounded", 14, "bold", "underline"), wraplength=600, justify="left"
+            )
+            assigned_to_label.pack(padx=5, fill="x", expand=True)
 
             task_label = ctk.CTkLabel(
                 top_row, text=task_label_text, anchor="w",
@@ -377,7 +384,7 @@ class TodoApp():
                     text_color=priority_color, anchor="w",
                     font=("Helvetica Rounded", 14)
                 )
-                priority_label.pack(side="left")
+                priority_label.pack(side="left", padx = 5)
 
             dropdown_var = ctk.StringVar(value="")
             priority_menu = ctk.CTkOptionMenu(
@@ -402,20 +409,6 @@ class TodoApp():
             )
             checkbox.pack(side="left", padx=5)
             self.task_checkboxes[task_id] = checkbox_var
-
-            complete_button = ctk.CTkButton(
-                task_frame, text="Complete",
-                command=lambda tid=task_id, comp=completed, checkvar=checkbox_var: self.toggle_complete(tid, comp, checkvar)
-            )
-            complete_button.pack(side="right", padx=5)
-
-            if completed:
-                complete_button.configure(text="Uncomplete")
-                checkbox_var.set(True)
-            else:
-                checkbox_var.set(False)
-
-            checkbox_var.set(checked)
 
             if description:
                 description_label = ctk.CTkLabel(
